@@ -1,4 +1,5 @@
 use core::cell::{Ref, RefCell, RefMut};
+use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use super::STC;
 
@@ -46,7 +47,7 @@ unsafe impl<T> Sync for SingleThreadRefCell<T> {}
 
 pub struct SingleThreadRef<'a, 'b, T: 'a, C: STC + 'b> {
     value: Ref<'a, T>,
-    _context: &'b C,
+    _context: PhantomData<&'b C>,
 }
 
 impl<'a, 'b, T: 'a, C: STC + 'b> Deref for SingleThreadRef<'a, 'b, T, C> {
@@ -60,7 +61,7 @@ impl<'a, 'b, T: 'a, C: STC + 'b> Deref for SingleThreadRef<'a, 'b, T, C> {
 
 pub struct SingleThreadRefMut<'a, 'b, T: 'a, C: STC + 'b> {
     value: RefMut<'a, T>,
-    _context: &'b C,
+    _context: PhantomData<&'b C>,
 }
 
 impl<'a, 'b, T: 'a, C: STC + 'b> Deref for SingleThreadRefMut<'a, 'b, T, C> {
@@ -88,18 +89,30 @@ impl<T> SingleThreadRefCell<T> {
     }
 
     #[inline]
-    pub fn borrow<'a, 'b, C: STC + 'b>(&'a self, context: &'b C) -> SingleThreadRef<'a, 'b, T, C> {
+    pub fn borrow<'a, 'b, C: STC + 'b>(&'a self, _context: &'b C) -> SingleThreadRef<'a, 'b, T, C> {
         SingleThreadRef {
             value: self.value.borrow(),
-            _context: context,
+            _context: PhantomData,
         }
     }
 
     #[inline]
-    pub fn borrow_mut<'a, 'b, C: STC + 'b>(&'a self, context: &'b C) -> SingleThreadRefMut<'a, 'b, T, C> {
+    pub fn borrow_mut<'a, 'b, C: STC + 'b>(&'a self, _context: &'b C) -> SingleThreadRefMut<'a, 'b, T, C> {
         SingleThreadRefMut {
             value: self.value.borrow_mut(),
-            _context: context,
+            _context: PhantomData,
         }
     }
+}
+
+#[test]
+fn test_zero_size() {
+    use core::mem;
+    static G_INT: SingleThreadRefCell<i32> = SingleThreadRefCell::new(5);
+
+    let ctx = unsafe { ::Init::new() };
+
+    assert_eq!(mem::size_of_val(&G_INT.value), mem::size_of_val(&G_INT));
+    let borrow = G_INT.borrow(&ctx);
+    assert_eq!(mem::size_of_val(&borrow), mem::size_of_val(&borrow.value));
 }
